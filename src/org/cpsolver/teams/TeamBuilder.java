@@ -2,7 +2,9 @@ package org.cpsolver.teams;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
@@ -124,24 +126,24 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
 
         sLog.info("Info: " + ToolBox.dict2string(solution.getExtendedInfo(), 2));
         
-        String header = "Team,Name";
-        for (Criterion<Student, TeamAssignment> criterion: model.getCriteria())
-            if (criterion instanceof Feature)
-                header += "," + ((Feature)criterion).getKey();
-        System.out.println(header);
+        CSVFile output = new CSVFile();
+        List<CSVFile.CSVField> header = new ArrayList<CSVFile.CSVField>();
+        header.add(new CSVFile.CSVField("Team"));
+        header.addAll(file.getHeader().getFields());
+        output.setHeader(header); 
         for (Constraint<Student, TeamAssignment> c: model.constraints()) {
             if (c instanceof Team) {
                 Team t = (Team)c;
                 for (Student s: t.getContext(solution.getAssignment()).getStudents()) {
-                    String line = t.getName() + ",\"" + s.getProperty("Name") + "\"";
-                    for (Criterion<Student, TeamAssignment> criterion: model.getCriteria())
-                        if (criterion instanceof Feature) {
-                            String value = ((Feature)criterion).getProperty(s);
-                            line += ",\"" + (value == null ? "" : value) + "\"";
-                        }
-                    System.out.println(line);
+                    List<CSVFile.CSVField> line = new ArrayList<CSVFile.CSVField>();
+                    line.add(new CSVFile.CSVField(t.getName()));
+                    for (CSVFile.CSVField head: file.getHeader().getFields()) {
+                        line.add(new CSVFile.CSVField(s.getProperty(head.toString())));
+                    }
+                    output.addLine(line);
                 }
             }
         }
+        output.save(new File(config.getProperty("output")));
     }
 }
