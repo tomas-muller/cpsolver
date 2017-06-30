@@ -15,9 +15,16 @@ public class Feature extends AbstractCriterion<Student, TeamAssignment> {
     public String iKey = null;
     public String[] iFallbacks = null;
     
-    Feature(String key, String... fallbacks) {
+    Feature(String key, String[] fallbacks) {
         iKey = key;
         iFallbacks = fallbacks;
+    }
+    
+    Feature(String... keyWithFallbacks) {
+        iKey = keyWithFallbacks[0];
+        iFallbacks = new String[keyWithFallbacks.length - 1];
+        for (int i = 0; i < keyWithFallbacks.length - 1; i++)
+            iFallbacks[i] = keyWithFallbacks[1 + i];
     }
     
     public String getKey() { return iKey; }

@@ -1,9 +1,11 @@
 package org.cpsolver.teams;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,7 @@ import org.cpsolver.ifs.util.ToolBox;
 
 public class TeamBuilder extends Model<Student, TeamAssignment>{
     private static Logger sLog = Logger.getLogger(TeamBuilder.class);
+    private Map<String, Criterion<Student, TeamAssignment>> iFeatures = new HashMap<String, Criterion<Student, TeamAssignment>>();
     
     @Override
     public double getTotalValue(Assignment<Student, TeamAssignment> assignment) {
@@ -41,9 +44,98 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
         return ret;
     }
     
+    @Override
+    public void addCriterion(Criterion<Student, TeamAssignment> criterion) {
+        if (criterion instanceof Feature) {
+            iFeatures.put(((Feature)criterion).getName(), criterion);
+            criterion.setModel(this);
+            addModelListener(criterion);
+        } else {
+            super.addCriterion(criterion);
+        }
+    }
+    
+    @Override
+    public void removeCriterion(Criterion<Student, TeamAssignment> criterion) {
+        if (criterion instanceof Feature) {
+            iFeatures.remove(((Feature)criterion).getName());
+            criterion.setModel(null);
+            removeModelListener(criterion);
+        } else {
+            super.removeCriterion(criterion);
+        }
+    }
+    
+    public Feature getFeature(String name) {
+        return (Feature)iFeatures.get(name);
+    }
+    
+    @Override
+    public Collection<Criterion<Student, TeamAssignment>> getCriteria() {
+        if (super.getCriteria().isEmpty()) {
+            return iFeatures.values();
+        } else {
+            List<Criterion<Student, TeamAssignment>> criteria = new ArrayList<Criterion<Student, TeamAssignment>>(iFeatures.values());
+            criteria.addAll(super.getCriteria());
+            return criteria;
+        }
+    }
+    
+    public static class ShutdownHook extends Thread {
+        Solver<Student, TeamAssignment> iSolver = null;
+
+        public ShutdownHook(Solver<Student, TeamAssignment> solver) {
+            setName("ShutdownHook");
+            iSolver = solver;
+        }
+
+        @Override
+        public void run() {
+            try {
+                if (iSolver.isRunning())
+                    iSolver.stopSolver();
+                
+                Solution<Student, TeamAssignment> solution = iSolver.lastSolution();
+                solution.restoreBest();
+
+                sLog.info("Best solution found after " + solution.getBestTime() + " seconds (" + solution.getBestIteration() + " iterations).");
+                sLog.info("Number of assigned variables is " + solution.getModel().assignedVariables(solution.getAssignment()).size());
+                sLog.info("Total value of the solution is " + solution.getModel().getTotalValue(solution.getAssignment()));
+
+                sLog.info("Info: " + ToolBox.dict2string(solution.getExtendedInfo(), 2));
+                
+                CSVFile output = new CSVFile();
+                List<CSVFile.CSVField> header = new ArrayList<CSVFile.CSVField>();
+                header.add(new CSVFile.CSVField("Team"));
+                CSVFile file = new CSVFile(new File(iSolver.getProperties().getProperty("input")));
+                header.addAll(file.getHeader().getFields());
+                output.setHeader(header); 
+                for (Constraint<Student, TeamAssignment> c: solution.getModel().constraints()) {
+                    if (c instanceof Team) {
+                        Team t = (Team)c;
+                        for (Student s: t.getContext(solution.getAssignment()).getStudents()) {
+                            List<CSVFile.CSVField> line = new ArrayList<CSVFile.CSVField>();
+                            line.add(new CSVFile.CSVField(t.getName()));
+                            for (CSVFile.CSVField head: file.getHeader().getFields()) {
+                                line.add(new CSVFile.CSVField(s.getProperty(head.toString())));
+                            }
+                            output.addLine(line);
+                        }
+                    }
+                }
+                output.save(new File(iSolver.getProperties().getProperty("output")));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
     public static void main(String[] args) throws IOException {
         DataProperties config = new DataProperties();
-        config.load(TeamBuilder.class.getClass().getResourceAsStream("/org/cpsolver/teams/teams.properties"));
+        if (System.getProperty("config") != null)
+            config.load(new FileInputStream(System.getProperty("config")));
+        else
+            config.load(TeamBuilder.class.getClass().getResourceAsStream("/org/cpsolver/teams/teams.properties"));
         config.putAll(System.getProperties());
         ToolBox.configureLogging();
         
@@ -67,13 +159,15 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
             model.addConstraint(t);
         }
         
-        model.addCriterion(new Feature("Program"){});
-        model.addCriterion(new Feature("Gender"){});
-        model.addCriterion(new IntegerFeature("GMAT", "Predicted GMAT"){});
-        model.addCriterion(new IntegerFeature("MW-Post"){});
-        model.addCriterion(new Feature("Major"){});
-        model.addCriterion(new Feature("Inst"){});
-        model.addCriterion(new Feature("Country of Citizenship"){});
+        for (String criterion: config.getProperty("Teams.Criteria").split("\\|")) {
+            Feature feature = null;
+            if (criterion.startsWith("@"))
+                feature = new IntegerFeature(criterion.substring(1).split(","));
+            else
+                feature = new Feature(criterion.split(","));
+            sLog.info("Using " + feature.getName() + " with weight of " + config.getPropertyDouble(feature.getWeightName(), feature.getWeightDefault(config)) + " (" + (feature instanceof IntegerFeature ? "integer feature" : "text feature") + ")");
+            model.addCriterion(feature);
+        }
         
         int nrSolvers = config.getPropertyInt("Parallel.NrSolvers", 1);
         Solver<Student, TeamAssignment> solver = (nrSolvers == 1 ? new Solver<Student, TeamAssignment>(config) : new ParallelSolver<Student, TeamAssignment>(config));
@@ -111,39 +205,12 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
             }
         });
 
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook(solver));
+        
         solver.start();
         try {
             solver.getSolverThread().join();
         } catch (InterruptedException e) {
         }
-        
-        Solution<Student, TeamAssignment> solution = solver.lastSolution();
-        solution.restoreBest();
-
-        sLog.info("Best solution found after " + solution.getBestTime() + " seconds (" + solution.getBestIteration() + " iterations).");
-        sLog.info("Number of assigned variables is " + solution.getModel().assignedVariables(solution.getAssignment()).size());
-        sLog.info("Total value of the solution is " + solution.getModel().getTotalValue(solution.getAssignment()));
-
-        sLog.info("Info: " + ToolBox.dict2string(solution.getExtendedInfo(), 2));
-        
-        CSVFile output = new CSVFile();
-        List<CSVFile.CSVField> header = new ArrayList<CSVFile.CSVField>();
-        header.add(new CSVFile.CSVField("Team"));
-        header.addAll(file.getHeader().getFields());
-        output.setHeader(header); 
-        for (Constraint<Student, TeamAssignment> c: model.constraints()) {
-            if (c instanceof Team) {
-                Team t = (Team)c;
-                for (Student s: t.getContext(solution.getAssignment()).getStudents()) {
-                    List<CSVFile.CSVField> line = new ArrayList<CSVFile.CSVField>();
-                    line.add(new CSVFile.CSVField(t.getName()));
-                    for (CSVFile.CSVField head: file.getHeader().getFields()) {
-                        line.add(new CSVFile.CSVField(s.getProperty(head.toString())));
-                    }
-                    output.addLine(line);
-                }
-            }
-        }
-        output.save(new File(config.getProperty("output")));
     }
 }
