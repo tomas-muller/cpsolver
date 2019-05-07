@@ -280,6 +280,8 @@ public class CSVFile implements Serializable {
                 return iFields.get(idx);
             } catch (ArrayIndexOutOfBoundsException e) {
                 return null;
+            } catch (IndexOutOfBoundsException e) {
+                return null;
             }
         }
 

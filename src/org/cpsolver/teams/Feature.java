@@ -9,18 +9,17 @@ import org.cpsolver.ifs.assignment.Assignment;
 import org.cpsolver.ifs.criteria.AbstractCriterion;
 import org.cpsolver.ifs.model.Constraint;
 import org.cpsolver.ifs.util.DataProperties;
-import org.cpsolver.ifs.util.ToolBox;
 
 public class Feature extends AbstractCriterion<Student, TeamAssignment> {
     public String iKey = null;
     public String[] iFallbacks = null;
     
-    Feature(String key, String[] fallbacks) {
+    public Feature(String key, String[] fallbacks) {
         iKey = key;
         iFallbacks = fallbacks;
     }
     
-    Feature(String... keyWithFallbacks) {
+    public Feature(String... keyWithFallbacks) {
         iKey = keyWithFallbacks[0];
         iFallbacks = new String[keyWithFallbacks.length - 1];
         for (int i = 0; i < keyWithFallbacks.length - 1; i++)
@@ -28,6 +27,8 @@ public class Feature extends AbstractCriterion<Student, TeamAssignment> {
     }
     
     public String getKey() { return iKey; }
+    
+    public String[] getFallbacks() { return iFallbacks; }
     
     @Override
     public String getName() {
@@ -55,7 +56,10 @@ public class Feature extends AbstractCriterion<Student, TeamAssignment> {
     }
     
     public double similar(Student a, Student b) {
-        return ToolBox.equals(getProperty(a), getProperty(b)) ? 1.0 : 0.0;
+        String va = getProperty(a);
+        String vb = getProperty(b);
+        if (va == null || vb == null) return 0.0;
+        return va.equals(vb) ? 1.0 : 0.0;
     }
 
     @Override
@@ -100,7 +104,7 @@ public class Feature extends AbstractCriterion<Student, TeamAssignment> {
                         if (value.equals(getProperty(s))) cnt ++;
                     if (cnt < min) min = cnt;
                     if (cnt > max) max = cnt;
-                    rms = Math.pow(cnt - avg, 2.0);
+                    rms += Math.pow(cnt - avg, 2.0);
                     penalty += cnt * (cnt - 1) / 2;
                 }
             }

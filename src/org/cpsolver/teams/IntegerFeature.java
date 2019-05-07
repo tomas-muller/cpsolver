@@ -10,11 +10,11 @@ import org.cpsolver.ifs.solver.Solver;
 public class IntegerFeature extends Feature {
     public int iMaximum = 0;
     
-    IntegerFeature(String key, String[] fallbacks) {
+    public IntegerFeature(String key, String[] fallbacks) {
         super(key, fallbacks);
     }
     
-    IntegerFeature(String... keyWithFallbacks) {
+    public IntegerFeature(String... keyWithFallbacks) {
         super(keyWithFallbacks);
     }
     

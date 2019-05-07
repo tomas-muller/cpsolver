@@ -21,4 +21,9 @@ public class TeamAssignment extends Value<Student, TeamAssignment>{
             value += c.getWeightedValue(assignment, this, null);
         return value;
     }
+    
+    @Override
+    public String toString() { 
+        return getTeam().getName();
+    }
 }

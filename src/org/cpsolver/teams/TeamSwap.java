@@ -27,12 +27,20 @@ public class TeamSwap implements NeighbourSelection<Student, TeamAssignment> {
             Student s1 = solution.getModel().variables().get((i + r1) % solution.getModel().variables().size());
             TeamAssignment a1 = solution.getAssignment().getValue(s1);
             if (a1 == null) continue;
+            if (s1.values(solution.getAssignment()).size() <= 1) continue;
+            if (s1.getSameTeam() != null) continue;
+            boolean l1 = s1.isLeader();
             int r2 = ToolBox.random(solution.getModel().variables().size());
             for (int j = 0; j < solution.getModel().variables().size(); j++) {
                 Student s2 = solution.getModel().variables().get((j + r2) % solution.getModel().variables().size());
                 if (s1.equals(s2)) continue;
+                if (s2.values(solution.getAssignment()).size() <= 1) continue;
+                if (s2.getSameTeam() != null) continue;
+                boolean l2 = s2.isLeader();
+                if (l1 != l2) continue;
                 TeamAssignment a2 = solution.getAssignment().getValue(s2);
                 if (a2 == null || a1.getTeam().equals(a2.getTeam())) continue;
+                if (!a1.getTeam().variables().contains(s2) || !a2.getTeam().variables().contains(s1)) continue;
                 TeamAssignment n1 = new TeamAssignment(s1, a2.getTeam());
                 TeamAssignment n2 = new TeamAssignment(s2, a1.getTeam());
                 return new Swap(n1, n2, n1.toDouble(solution.getAssignment()) + n2.toDouble(solution.getAssignment()) - a1.toDouble(solution.getAssignment()) - a2.toDouble(solution.getAssignment()));
