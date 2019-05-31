@@ -6,8 +6,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.log4j.Logger;
 import org.cpsolver.ifs.assignment.Assignment;
@@ -130,6 +132,44 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
         }
     }
     
+    protected void createTeams(int idx, List<SameFeature> sameFeatures, int teamSize, List<Student> students, List<Team> teams, String name, int extra) {
+        if (idx == 0) {
+            String line = "";
+            for (SameFeature sf: sameFeatures)
+                line += sf.getKey() + ",";
+            sLog.info(line + "Number of Students,Lead,Other,Number of Teams");
+        }
+        if (idx == sameFeatures.size()) {
+            double size = 0.0;
+            for (Student s: students)
+                size += s.getWeight();
+            int nrTeams = (int)Math.ceil(size / teamSize) + extra;
+            sLog.info(name + students.size() + "," + Math.round(students.size() - size) + "," + Math.round(size) + "," + nrTeams);
+            for (int i = 1; i <= nrTeams; i++) {
+                Team t = new Team(new Long(teams.size()), "Team " + (teams.size() + 1), teamSize);
+                teams.add(t);
+                for (Student s: students) t.addVariable(s);
+                addConstraint(t);
+            }
+        } else {
+            SameFeature sf = sameFeatures.get(idx);
+            Map<String, List<Student>> val2students = new HashMap<String, List<Student>>();
+            for (Student s: students) {
+                String val = sf.getProperty(s);
+                if (val == null || val.isEmpty()) val = "-";
+                List<Student> stds = val2students.get(val);
+                if (stds == null) {
+                    stds = new ArrayList<Student>();
+                    val2students.put(val, stds);
+                }
+                stds.add(s);
+            }
+            for (Map.Entry<String, List<Student>> e: val2students.entrySet()) {
+                createTeams(idx + 1, sameFeatures, teamSize, e.getValue(), teams, name + "\"" + e.getKey() + "\",", extra);
+            }
+        }
+    }
+    
     public static void main(String[] args) throws IOException {
         DataProperties config = new DataProperties();
         if (System.getProperty("config") != null)
@@ -141,6 +181,8 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
         
         TeamBuilder model = new TeamBuilder();
         CSVFile file = new CSVFile(new File(config.getProperty("input")));
+        String leadAttr = config.getProperty("CSV.Lead.Attribute");
+        String leadValue = config.getProperty("CSV.Lead.Value");
         for (CSVFile.CSVLine line: file.getLines()) {
             Student student = new Student();
             for (CSVFile.CSVField head: file.getHeader().getFields()) {
@@ -148,25 +190,69 @@ public class TeamBuilder extends Model<Student, TeamAssignment>{
                 if (field != null && !field.toString().isEmpty())
                     student.setProperty(head.toString(), field.toString());
             }
+            if (leadValue != null && leadValue.equals(student.getProperty(leadAttr))) student.setWeight(0);
             model.addVariable(student);
         }
         
-        int teamSize = config.getPropertyInt("teamSize", 5);
-        int nrTeams = (int)Math.ceil(((double)model.variables().size()) / teamSize);
-        for (int i = 1; i <= nrTeams; i++) {
-            Team t = new Team(new Long(i), "Team " + i, teamSize);
-            for (Student s: model.variables()) t.addVariable(s);
-            model.addConstraint(t);
-        }
-        
+        List<SameFeature> sameFeatures = new ArrayList<SameFeature>();
+        Set<String> weakerSameFeatures = new HashSet<String>();
         for (String criterion: config.getProperty("Teams.Criteria").split("\\|")) {
             Feature feature = null;
-            if (criterion.startsWith("@"))
+            if (criterion.equals("TeamSize") || criterion.equals("Team Size")) {
+                model.addCriterion(new TeamSize());
+                sLog.info("Using Team Size with weight of " + config.getPropertyDouble("Weight.TeamSize", 1.0));
+                continue;
+            } else if (criterion.startsWith("@"))
                 feature = new IntegerFeature(criterion.substring(1).split(","));
-            else
+            else if (criterion.startsWith("^"))
+                feature = new ReversedFeature(criterion.substring(1).split(","));
+            else if (criterion.startsWith("#"))
+                feature = new RoomNearby(criterion.substring(1).split(","));
+            else if (criterion.startsWith("!")) {
+                SameFeature sf = new SameFeature(criterion.substring(1).split(","));
+                sLog.info("Using " + sf.getKey() + " same feature constraint.");
+                sameFeatures.add(sf);
+                model.addGlobalConstraint(sf);
+                continue;
+            } else if (criterion.startsWith("?")) {
+                SameFeature sf = new SameFeature(criterion.substring(1).split(","));
+                sLog.info("Using " + sf.getKey() + " same feature constraint (not for leads).");
+                sameFeatures.add(sf);
+                weakerSameFeatures.add(sf.getKey());
+                // model.addGlobalConstraint(sf);
+                continue;
+            } else
                 feature = new Feature(criterion.split(","));
             sLog.info("Using " + feature.getName() + " with weight of " + config.getPropertyDouble(feature.getWeightName(), feature.getWeightDefault(config)) + " (" + (feature instanceof IntegerFeature ? "integer feature" : "text feature") + ")");
             model.addCriterion(feature);
+        }
+        
+        int teamSize = config.getPropertyInt("teamSize", 5);
+        if (sameFeatures.isEmpty()) {
+            int nrTeams = (int)Math.ceil(((double)model.variables().size()) / teamSize) + config.getPropertyInt("extraTeams", 0);
+            for (int i = 1; i <= nrTeams; i++) {
+                Team t = new Team(new Long(i), "Team " + i, teamSize);
+                for (Student s: model.variables()) t.addVariable(s);
+                model.addConstraint(t);
+            }
+        } else {
+            List<Team> teams = new ArrayList<Team>();
+            model.createTeams(0, sameFeatures, teamSize, model.variables(), teams, "", config.getPropertyInt("extraTeams", 0));
+            if (!weakerSameFeatures.isEmpty()) {
+                for (Student s: model.variables()) {
+                    if (s.getWeight() == 0) {
+                        for (Team t: teams) {
+                            Student x = t.variables().get(0);
+                            boolean match = true;
+                            for (SameFeature sf: sameFeatures) {
+                                if (!weakerSameFeatures.contains(sf.getKey()) && !sf.same(s, x)) match = false;
+                                if (weakerSameFeatures.contains(sf.getKey()) && sf.same(s, x)) match = false;
+                            }
+                            if (match) t.addVariable(s);
+                        }
+                    }
+                }   
+            }
         }
         
         int nrSolvers = config.getPropertyInt("Parallel.NrSolvers", 1);

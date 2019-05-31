@@ -13,6 +13,7 @@ public class Student extends Variable<Student, TeamAssignment> {
     private Map<String,String> iProperties = new HashMap<String,String>();
     private boolean iLeader = false;
     private SameTeam iSameTeam = null;
+    private int iWeight = 1;
 
     public void setProperty(String key, String value) {
         if (value == null) iProperties.remove(key);
@@ -26,15 +27,22 @@ public class Student extends Variable<Student, TeamAssignment> {
     public boolean isLeader() { return iLeader; }
     public void setLeader(boolean leader) { iLeader = leader; }
     
+    public int getWeight() { return iWeight; }
+    public void setWeight(int weight) { iWeight = weight; }
+    
     public SameTeam getSameTeam() { return iSameTeam; }
     public void setSameTeam(SameTeam sameTeam) { iSameTeam = sameTeam; }
     
     @Override
     public List<TeamAssignment> values(Assignment<Student, TeamAssignment> assignment) {
-        List<TeamAssignment> values = new ArrayList<TeamAssignment>();
-        for (Constraint<Student, TeamAssignment> c: getModel().constraints()) {
-            if (c instanceof Team && c.variables().contains(this))
-                values.add(new TeamAssignment(this, (Team)c));
+        List<TeamAssignment> values = super.values(assignment);
+        if (values == null) {
+            values = new ArrayList<TeamAssignment>();
+            for (Constraint<Student, TeamAssignment> c: getModel().constraints()) {
+                if (c instanceof Team && c.variables().contains(this))
+                    values.add(new TeamAssignment(this, (Team)c));
+            }
+            setValues(values);
         }
         return values;
     }

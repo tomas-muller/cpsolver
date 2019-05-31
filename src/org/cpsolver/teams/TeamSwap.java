@@ -1,10 +1,13 @@
 package org.cpsolver.teams;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.cpsolver.ifs.assignment.Assignment;
 import org.cpsolver.ifs.heuristics.NeighbourSelection;
+import org.cpsolver.ifs.model.Constraint;
 import org.cpsolver.ifs.model.Neighbour;
 import org.cpsolver.ifs.solution.Solution;
 import org.cpsolver.ifs.solver.Solver;
@@ -12,12 +15,18 @@ import org.cpsolver.ifs.util.DataProperties;
 import org.cpsolver.ifs.util.ToolBox;
 
 public class TeamSwap implements NeighbourSelection<Student, TeamAssignment> {
+    List<SameFeature> iSameFeatures;
     
     public TeamSwap(DataProperties config) {
     }
 
     @Override
     public void init(Solver<Student, TeamAssignment> solver) {
+        iSameFeatures = new ArrayList<SameFeature>();
+        for (Constraint<Student, TeamAssignment> c: solver.currentSolution().getModel().globalConstraints()) {
+            if (c instanceof SameFeature)
+                iSameFeatures.add((SameFeature)c);
+        }
     }
 
     @Override
@@ -31,16 +40,21 @@ public class TeamSwap implements NeighbourSelection<Student, TeamAssignment> {
             if (s1.getSameTeam() != null) continue;
             boolean l1 = s1.isLeader();
             int r2 = ToolBox.random(solution.getModel().variables().size());
-            for (int j = 0; j < solution.getModel().variables().size(); j++) {
+            s2: for (int j = 0; j < solution.getModel().variables().size(); j++) {
                 Student s2 = solution.getModel().variables().get((j + r2) % solution.getModel().variables().size());
                 if (s1.equals(s2)) continue;
                 if (s2.values(solution.getAssignment()).size() <= 1) continue;
                 if (s2.getSameTeam() != null) continue;
                 boolean l2 = s2.isLeader();
                 if (l1 != l2) continue;
+                // if (s1.getWeight() != s2.getWeight()) continue;
+                if (a1.getTeam().getContext(solution.getAssignment()).getStudentCount() - s1.getWeight() + s2.getWeight() > a1.getTeam().getSize()) continue;
+                for (SameFeature f: iSameFeatures)
+                    if (!f.same(s1, s2)) continue s2;
                 TeamAssignment a2 = solution.getAssignment().getValue(s2);
                 if (a2 == null || a1.getTeam().equals(a2.getTeam())) continue;
                 if (!a1.getTeam().variables().contains(s2) || !a2.getTeam().variables().contains(s1)) continue;
+                if (a2.getTeam().getContext(solution.getAssignment()).getStudentCount() - s2.getWeight() + s1.getWeight() > a2.getTeam().getSize()) continue;
                 TeamAssignment n1 = new TeamAssignment(s1, a2.getTeam());
                 TeamAssignment n2 = new TeamAssignment(s2, a1.getTeam());
                 return new Swap(n1, n2, n1.toDouble(solution.getAssignment()) + n2.toDouble(solution.getAssignment()) - a1.toDouble(solution.getAssignment()) - a2.toDouble(solution.getAssignment()));

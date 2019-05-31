@@ -35,8 +35,8 @@ public class ProportionalFeature extends Feature {
     }
     
     @Override
-    public void getInfo(Assignment<Student, TeamAssignment> assignment, Map<String, String> info) {
-        super.getInfo(assignment, info);
+    public void getExtendedInfo(Assignment<Student, TeamAssignment> assignment, Map<String, String> info) {
+        super.getExtendedInfo(assignment, info);
         info.put(getKey(), String.valueOf(getValue(assignment)));
         Map<String, Integer> values = new HashMap<String, Integer>();
         for (Student student: getModel().variables()) {

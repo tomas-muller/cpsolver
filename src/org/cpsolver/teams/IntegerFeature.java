@@ -1,6 +1,5 @@
 package org.cpsolver.teams;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import org.cpsolver.ifs.assignment.Assignment;
@@ -38,8 +37,8 @@ public class IntegerFeature extends Feature {
     }
     
     @Override
-    public void getInfo(Assignment<Student, TeamAssignment> assignment, Map<String, String> info) {
-        super.getInfo(assignment, info);
+    public void getExtendedInfo(Assignment<Student, TeamAssignment> assignment, Map<String, String> info) {
+        super.getExtendedInfo(assignment, info);
         double min = Double.MAX_VALUE, max = Double.MIN_VALUE;
         double total = 0;
         int teams = 0;
