@@ -42,6 +42,7 @@ public class PYTSmallTeamBuilder {
             config.load(PYTSmallTeamBuilder.class.getClass().getResourceAsStream("/org/cpsolver/teams/pyt.properties"));
         config.putAll(System.getProperties());
         ToolBox.configureLogging();
+        boolean roomRegExp = config.getPropertyBoolean("CSV.roomRestrictionsRegExp", false);
         
         List<Group> groups = new ArrayList<Group>();
         for (String group: config.getProperty("groups").split(","))
@@ -236,7 +237,8 @@ public class PYTSmallTeamBuilder {
                         for (String r: restrictions.split("[\n\r]")) {
                             if (r.isEmpty()) continue;
                             // if ("ME 1051".equals(r)) { match = true; continue; }
-                            if (room.getName().equalsIgnoreCase(r) || room.getName().startsWith(r + " ") || room.getName().matches(r)) { match = true; break; }
+                            if (room.getName().equalsIgnoreCase(r) || room.getName().startsWith(r + " ")) { match = true; break; }
+                            if (roomRegExp && room.getName().matches(r)) { match = true; break; }
                         }
                         if (!match) continue;
                     }
@@ -272,7 +274,8 @@ public class PYTSmallTeamBuilder {
                             boolean match = false;
                             for (String r: restrictions.split("[\n\r]")) {
                                 if (r.isEmpty()) continue;
-                                if (room.getName().equalsIgnoreCase(r) || room.getName().startsWith(r + " ") || room.getName().matches(r)) { match = true; break; }
+                                if (room.getName().equalsIgnoreCase(r) || room.getName().startsWith(r + " ")) { match = true; break; }
+                                if (roomRegExp && room.getName().matches(r)) { match = true; break; }
                             }
                             if (!match) continue;
                         }
